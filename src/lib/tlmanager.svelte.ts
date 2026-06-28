@@ -55,12 +55,14 @@ export class TLManager {
 	tl: HTMLDivElement;
 	public visibleEvents: VisibleEvent[] = $state([]);
     tlDivs: Map<number, {div: HTMLDivElement, shouldDelete: boolean}> = new Map();
+    private resizeObserver: ResizeObserver;
 
-	private resizeWatcher() {
+	public resizeWatcher() {
 		this.height = this.tl.clientHeight;
 		this.width = this.tl.clientWidth;
 		//todo: add debouncing
 		this.updateVisible();
+        console.log(`resizeWatcher called, new width: ${this.width}, new height: ${this.height}`);
 	}
 
 	constructor(tl: HTMLDivElement) {
@@ -71,13 +73,22 @@ export class TLManager {
 		this.tl = tl;
 		this.height = this.tl.clientHeight;
 		this.width = this.tl.clientWidth;
-		tl.addEventListener('resize', this.resizeWatcher.bind(this));
 		this.startViewportDate = new Date('2023-01-01');
 		this.endViewportDate = new Date('2023-12-31');
 		this.zoomLevel = 1;
 
+        this.resizeObserver = new ResizeObserver(() => {
+            this.resizeWatcher();
+        });
+
+        this.resizeObserver.observe(this.tl);
+
         this.updateVisible();
 	}
+
+    public destroy() {
+        this.resizeObserver.disconnect();
+    }
 
 	public updateVisible() {
         this.visibleEvents.length = 0; //clear this, might be a better way to reuse
