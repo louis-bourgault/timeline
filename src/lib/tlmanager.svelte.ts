@@ -29,20 +29,20 @@ const sampleEvents: Event[] = [
 		isBce: false,
 		dateDisplay: 'February 1, 2023'
 	},
-    {
-        id: 3,
-        title: 'Event 3',
-        description: 'Description for Event 3',
-        wikiUrl: 'https://en.wikipedia.org/wiki/Event_3',
-        viewPriority: 3,
-        importance: 0.9,
-        tagIds: [1, 3],
-        startDate: new Date('2023-03-01'),
-        endDate: null, // Point event
-        precision: 'day',
-        isBce: false,
-        dateDisplay: 'March 1, 2023'
-    },
+	{
+		id: 3,
+		title: 'Event 3',
+		description: 'Description for Event 3',
+		wikiUrl: 'https://en.wikipedia.org/wiki/Event_3',
+		viewPriority: 3,
+		importance: 0.9,
+		tagIds: [1, 3],
+		startDate: new Date('2023-03-01'),
+		endDate: null, // Point event
+		precision: 'day',
+		isBce: false,
+		dateDisplay: 'March 1, 2023'
+	},
 	{
 		id: 4,
 		title: 'Event 4',
@@ -68,16 +68,15 @@ export class TLManager {
 	zoomLevel: number;
 	tl: HTMLDivElement;
 	public visibleEvents: VisibleEvent[] = $state([]);
-    tlDivs: Map<number, {div: HTMLDivElement, shouldDelete: boolean}> = new Map();
-    private resizeObserver: ResizeObserver;
-	private scrollObserver: IntersectionObserver;
+	tlDivs: Map<number, { div: HTMLDivElement }> = new Map();
+	private resizeObserver: ResizeObserver;
 
 	public resizeWatcher() {
 		this.height = this.tl.clientHeight;
 		this.width = this.tl.clientWidth;
 		//todo: add debouncing
 		this.updateVisible();
-        console.log(`resizeWatcher called, new width: ${this.width}, new height: ${this.height}`);
+		console.log(`resizeWatcher called, new width: ${this.width}, new height: ${this.height}`);
 	}
 
 	constructor(tl: HTMLDivElement) {
@@ -92,33 +91,32 @@ export class TLManager {
 		this.endViewportDate = new Date('2023-12-31');
 		this.zoomLevel = 1;
 
-        this.resizeObserver = new ResizeObserver(() => {
-            this.resizeWatcher();
-        });
+		this.resizeObserver = new ResizeObserver(() => {
+			this.resizeWatcher();
+		});
 		this.resizeObserver.observe(this.tl);
-		
+
 		this.tl.addEventListener('wheel', (e) => {
 			e.preventDefault();
 			this.handleScroll(e.deltaX, e.deltaY);
 			this.updateVisible();
 		});
-		
-		
-		
-        this.updateVisible();
+
+		this.updateVisible();
 	}
 
-    public destroy() {
-        this.resizeObserver.disconnect();
-    }
+	public destroy() {
+		this.resizeObserver.disconnect();
+	}
 
 	public handleScroll(deltaX: number, deltaY: number) {
-		console.log(`x: ${deltaX}, y: ${deltaY}`);
 		if (deltaY !== 0) {
 			const zoomBy = 1 + deltaY * 0.001; // Adjust zoom sensitivity as needed
-			
+
 			this.zoomLevel *= zoomBy;
-			const midDate = new Date((this.startViewportDate.getTime() + this.endViewportDate.getTime()) / 2);
+			const midDate = new Date(
+				(this.startViewportDate.getTime() + this.endViewportDate.getTime()) / 2
+			);
 			const totalTime = this.endViewportDate.getTime() - this.startViewportDate.getTime();
 			const newTotalTime = totalTime * zoomBy;
 			this.startViewportDate = new Date(midDate.getTime() - newTotalTime / 2);
@@ -134,11 +132,24 @@ export class TLManager {
 	}
 
 	public updateVisible() {
-        this.visibleEvents.length = 0; //clear this, might be a better way to reuse
+		this.visibleEvents.length = 0; //clear this, might be a better way to reuse
+		let divsToKeep = new Set<number>();
 		for (const event of this.events) {
-			if (event.startDate >= this.startViewportDate) {
+			const eventEnd = event.endDate ?? event.startDate;
+
+			if (eventEnd <= this.startViewportDate || event.startDate >= this.endViewportDate) {
+				console.log(`event ${event.id} is not visible`);
+				continue;
+			} else {
 				//event is visible
-				const startX = this.dateToX(event.startDate);
+				let startX = this.dateToX(event.startDate);
+				let osWidth = 0;
+				if (startX < 0) {
+					startX = 0;
+					osWidth = this.dateToX(event.startDate) - startX;
+					console.log(`oswidth: ${osWidth}`);
+				}
+
 				if (event.endDate) {
 					const endX = this.dateToX(event.endDate);
 					if (endX - startX < 10) {
@@ -152,61 +163,98 @@ export class TLManager {
 						this.visibleEvents.push({
 							...event,
 							x: startX,
-							width: endX - startX
+							width: endX - startX + Math.floor(osWidth) //oswidth is negative
 						});
 					}
 				} else {
-                    this.visibleEvents.push({
-                        ...event,
-                        x: startX,
-                        width: null
-                    });
-
-                }
+					this.visibleEvents.push({
+						...event,
+						x: startX,
+						width: null
+					});
+				}
 			}
 		}
 
-        for (const event of this.visibleEvents) {
-            let tlEventElement: HTMLDivElement | undefined;
-            let wasFromMap = false;
-            if (this.tlDivs.has(event.id)) {
-                //update existing div
-                const record = this.tlDivs.get(event.id);
-                tlEventElement = record?.div;
-                wasFromMap = true;
+		for (const event of this.visibleEvents) {
+			let tlEventElement: HTMLDivElement | undefined;
+			let wasFromMap = false;
+			if (this.tlDivs.has(event.id)) {
+				//update existing div
+				const record = this.tlDivs.get(event.id);
+				tlEventElement = record?.div;
+				wasFromMap = true;
+			} else {
+				tlEventElement = document.createElement('div');
+				tlEventElement.classList.add('tl-event');
+				tlEventElement.id = `tl-event-${event.id}`;
+			}
+			if (!tlEventElement) {
+				console.error(`somewthing really weird happened`);
+				continue;
+			}
 
-            } else {
-                tlEventElement = document.createElement('div');
-                tlEventElement.classList.add('tl-event');
-                tlEventElement.id = `tl-event-${event.id}`;
+			tlEventElement.style.left = `${event.x}px`;
+			//todo: different styles for point vs range events
+			if (event.width) {
+				tlEventElement.style.width = `${event.width}px`;
+			} else {
+				tlEventElement.style.width = `2px`; //point event
+			}
+			this.tl.appendChild(tlEventElement);
+			if (!wasFromMap) {
+				this.tlDivs.set(event.id, { div: tlEventElement });
+				divsToKeep.add(event.id);
+			} else {
+				divsToKeep.add(event.id);
+			}
+		}
+		for (const [id, record] of this.tlDivs) {
+			if (!divsToKeep.has(id)) {
+				//remove this div from the DOM and the map
+				record.div.remove();
+				this.tlDivs.delete(id);
+				//actually delete the div from the dom
+				document.getElementById(`tl-event-${id}`)?.remove();
+			}
+		}
 
-            } if (!tlEventElement) {
-                console.error(`somewthing really weird happened`);
-                continue;
-            }
+		// //add tickers for where we are
+		// let tickersToAdd: Date[] = [];
+		// const timeWidth = this.endViewportDate.getTime() - this.startViewportDate.getTime();
+		// if (timeWidth < 1000*60*60*24*365*10) { //less than 10 years, show ticks for years
+		// 	for (let year = this.startViewportDate.getFullYear(); year <= this.endViewportDate.getFullYear(); year++) {
+		// 		tickersToAdd.push(new Date(year, 0, 1));
+		// 	}
+		// }
+		// for (const tickerDate of tickersToAdd) {
+		// 	let tickerElement: HTMLDivElement | undefined;
+		// 	let wasFromMap = false;
+		// 	if (this.tlDivs.has(tickerDate.getTime())) {
+		// 		//update existing div
+		// 		const record = this.tlDivs.get(tickerDate.getTime());
+		// 		tickerElement = record?.div;
+		// 		wasFromMap = true;
 
-            tlEventElement.style.left = `${event.x}px`;
-            //todo: different styles for point vs range events
-            if (event.width) {
-                tlEventElement.style.width = `${event.width}px`;
-            } else {
-                tlEventElement.style.width = `2px`; //point event
-            }
-            this.tl.appendChild(tlEventElement);
-            if (!wasFromMap) {
-                this.tlDivs.set(event.id, {div: tlEventElement, shouldDelete: false});
-            } else {
-                this.tlDivs.get(event.id)!.shouldDelete = false;
-            }
-        }
-        for (const [id, record] of this.tlDivs) {
-            if (record.shouldDelete) {
-                this.tl.removeChild(record.div);
-                this.tlDivs.delete(id);
-            } else {
-                record.shouldDelete = true;
-            }
-        }
+		// 	} else {
+		// 		tickerElement = document.createElement('div');
+		// 		tickerElement.classList.add('tl-ticker');
+		// 		tickerElement.id = `tl-ticker-${tickerDate.getTime()}`;
+
+		// 	} if (!tickerElement) {
+		// 		console.error(`somewthing really weird happened`);
+		// 		continue;
+		// 	}
+
+		// 	const xPos = this.dateToX(tickerDate);
+		// 	tickerElement.style.left = `${xPos}px`;
+		// 	this.tl.appendChild(tickerElement);
+		// 	if (!wasFromMap) {
+		// 		this.tlDivs.set(tickerDate.getTime(), {div: tickerElement, shouldNotDelete: false});
+		// 	} else {
+		// 		this.tlDivs.get(tickerDate.getTime())!.shouldNotDelete = false;
+		// 	}
+		// }
 	}
 
 	dateToX(date: Date): number {
