@@ -1,4 +1,3 @@
-import { bigint } from 'better-auth';
 import { pgTable, serial, integer, text, bigserial, real, date, boolean } from 'drizzle-orm/pg-core';
 
 export const events = pgTable("events", {
@@ -23,6 +22,3 @@ export const tags = pgTable("tags", {
 	name: text("name").notNull(),
 	color: text("color"),
 }); //there are thousands of tags, we'll need an api for them all
-
-
-export *  from './auth.schema';

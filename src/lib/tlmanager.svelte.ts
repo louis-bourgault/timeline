@@ -60,7 +60,7 @@ const sampleEvents: Event[] = [
 ];
 
 export class TLManager {
-	events: Event[];
+	events: Event[] = $state([]);
 	height: number;
 	width: number;
 	startViewportDate: Date;
@@ -69,6 +69,7 @@ export class TLManager {
 	tl: HTMLDivElement;
 	public visibleEvents: VisibleEvent[] = $state([]);
 	tlDivs: Map<number, { div: HTMLDivElement }> = new Map();
+	tickerDivs: Map<string, { div: HTMLDivElement }> = new Map();
 	private resizeObserver: ResizeObserver;
 
 	public resizeWatcher() {
@@ -80,7 +81,9 @@ export class TLManager {
 	}
 
 	constructor(tl: HTMLDivElement) {
-		this.events = $state([]);
+		if (!document) {
+			return;
+		}
 		for (const event of sampleEvents) {
 			this.events.push(event);
 		}
@@ -103,6 +106,43 @@ export class TLManager {
 		});
 
 		this.updateVisible();
+
+
+		
+		
+		tl.addEventListener('mouseover', (e: MouseEvent) => {
+			const target = (e.target as HTMLElement | null)
+			console.log(`mouseover event on ${target}`);
+			if (!target) return; 
+			const id = parseInt(target.id.replace('tl-event-', ''));
+			this.handleHover(id);
+		});
+		tl.addEventListener('mouseout', (e: MouseEvent) => {
+			
+			const target = (e.target as HTMLElement | null)?.closest('tl-event') as HTMLElement | null;
+			if (!target) return; 
+			this.handleExitHover();
+		});
+		
+	}
+
+	hoveredEventId: number | null = null;
+	openHoverWindowTimeout: number | null = null;
+
+	public handleHover(eventId: number) {
+		this.openHoverWindowTimeout = window.setTimeout(() => {this.openHoverWindow(eventId)}, 500);
+	}
+
+	public handleExitHover() {
+		if (this.openHoverWindowTimeout) {
+			clearTimeout(this.openHoverWindowTimeout);
+			this.openHoverWindowTimeout = null;
+		}
+	}
+
+	public openHoverWindow(eventId: number) {
+		console.log("you've been over this event long enough to show some info!", eventId);
+		
 	}
 
 	public destroy() {
@@ -219,42 +259,55 @@ export class TLManager {
 			}
 		}
 
-		// //add tickers for where we are
-		// let tickersToAdd: Date[] = [];
-		// const timeWidth = this.endViewportDate.getTime() - this.startViewportDate.getTime();
-		// if (timeWidth < 1000*60*60*24*365*10) { //less than 10 years, show ticks for years
-		// 	for (let year = this.startViewportDate.getFullYear(); year <= this.endViewportDate.getFullYear(); year++) {
-		// 		tickersToAdd.push(new Date(year, 0, 1));
-		// 	}
-		// }
-		// for (const tickerDate of tickersToAdd) {
-		// 	let tickerElement: HTMLDivElement | undefined;
-		// 	let wasFromMap = false;
-		// 	if (this.tlDivs.has(tickerDate.getTime())) {
-		// 		//update existing div
-		// 		const record = this.tlDivs.get(tickerDate.getTime());
-		// 		tickerElement = record?.div;
-		// 		wasFromMap = true;
-
-		// 	} else {
-		// 		tickerElement = document.createElement('div');
-		// 		tickerElement.classList.add('tl-ticker');
-		// 		tickerElement.id = `tl-ticker-${tickerDate.getTime()}`;
-
-		// 	} if (!tickerElement) {
-		// 		console.error(`somewthing really weird happened`);
-		// 		continue;
-		// 	}
-
-		// 	const xPos = this.dateToX(tickerDate);
-		// 	tickerElement.style.left = `${xPos}px`;
-		// 	this.tl.appendChild(tickerElement);
-		// 	if (!wasFromMap) {
-		// 		this.tlDivs.set(tickerDate.getTime(), {div: tickerElement, shouldNotDelete: false});
-		// 	} else {
-		// 		this.tlDivs.get(tickerDate.getTime())!.shouldNotDelete = false;
-		// 	}
-		// }
+		//add tickers for where we are
+		let tickersToAdd: Date[] = [];
+		const timeWidth = this.endViewportDate.getTime() - this.startViewportDate.getTime();
+		let tickerSpecificity: 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | undefined =
+			undefined;
+		if (timeWidth < 1000 * 60 * 60 * 24 * 365 * 10) {
+			//less than 10 years, show ticks for years
+			tickerSpecificity = 'year';
+			for (
+				let year = this.startViewportDate.getFullYear();
+				year <= this.endViewportDate.getFullYear();
+				year++
+			) {
+				tickersToAdd.push(new Date(year, 0, 1));
+			}
+		}
+		let tickerDivsToKeep = new Set<string>();
+		for (const tickerDate of tickersToAdd) {
+			const tickerX = this.dateToX(tickerDate);
+			let tickerDiv: HTMLDivElement | undefined;
+			if (this.tickerDivs.has(tickerDate.toISOString())) {
+				tickerDiv = this.tickerDivs.get(tickerDate.toISOString())?.div;
+			} else {
+				tickerDiv = document.createElement('div');
+				tickerDiv.classList.add('tl-ticker');
+				tickerDiv.id = `tl-ticker-${tickerDate.toISOString()}`;
+				//we wnat it ot be for intervals other than year in future
+				if (tickerSpecificity === 'year') {
+					tickerDiv.innerText = `${tickerDate.getFullYear()}`;
+				}
+			}
+			if (!tickerDiv) {
+				console.error(`something really weird happened with tickers`);
+				continue;
+			}
+			tickerDiv.style.left = `${tickerX}px`;
+			this.tl.appendChild(tickerDiv);
+			this.tickerDivs.set(tickerDate.toISOString(), { div: tickerDiv });
+			tickerDivsToKeep.add(tickerDate.toISOString());
+		}
+		for (const [isoDate, record] of this.tickerDivs) {
+			if (!tickerDivsToKeep.has(isoDate)) {
+				//remove this div from the DOM and the map
+				record.div.remove();
+				this.tickerDivs.delete(isoDate);
+				//actually delete the div from the dom
+				document.getElementById(`tl-ticker-${isoDate}`)?.remove();
+			}
+		}
 	}
 
 	dateToX(date: Date): number {
