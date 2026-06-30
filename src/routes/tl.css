@@ -9,3 +9,34 @@
     position: relative;
     top: 50%;
 }
+
+.tl-hover-brief {
+    height: 200px;
+    /* TODO: make this in rem so its better for differnet scaling */
+    padding: 1rem;
+    background-color: var(--color-background);
+    border: 1px solid var(--color-primary);
+}
+
+.tl-hover-brief h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--color-primary);
+}
+
+.tl-hover-brief p {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--color-text);
+}
+
+.tl-hover-brief a {
+    font-size: 1rem;
+    color: var(--color-secondary-foreground);
+    text-decoration: none;
+
+}
+
+.tl-hover-brief a:hover {
+    text-decoration: underline;
+}

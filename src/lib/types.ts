@@ -17,3 +17,9 @@ export type VisibleEvent = Event & {
     x: number;
     width: number | null; //if null, its a point event (a range event can be shown as a point event if we're too far zoomed out.)
 }
+
+export type Tag = {
+    id: number;
+    name: string;
+    color: string | null;
+}

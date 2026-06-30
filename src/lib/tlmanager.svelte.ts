@@ -1,4 +1,4 @@
-import type { Event, VisibleEvent } from './types';
+import type { Event, Tag, VisibleEvent } from './types';
 
 const sampleEvents: Event[] = [
 	{
@@ -71,6 +71,11 @@ export class TLManager {
 	tlDivs: Map<number, { div: HTMLDivElement }> = new Map();
 	tickerDivs: Map<string, { div: HTMLDivElement }> = new Map();
 	private resizeObserver: ResizeObserver;
+	private hoverTimeout: number | null = null;
+	private hoveredEventId: number | null = null;
+	hb: HTMLDivElement | null = null;
+	visibleTags: Tag[] = $state([]);
+
 
 	public resizeWatcher() {
 		this.height = this.tl.clientHeight;
@@ -106,42 +111,97 @@ export class TLManager {
 		});
 
 		this.updateVisible();
-
-
-		
-		
-		tl.addEventListener('mouseover', (e: MouseEvent) => {
-			const target = (e.target as HTMLElement | null)
-			console.log(`mouseover event on ${target}`);
-			if (!target) return; 
-			const id = parseInt(target.id.replace('tl-event-', ''));
-			this.handleHover(id);
-		});
-		tl.addEventListener('mouseout', (e: MouseEvent) => {
-			
-			const target = (e.target as HTMLElement | null)?.closest('tl-event') as HTMLElement | null;
-			if (!target) return; 
-			this.handleExitHover();
-		});
-		
 	}
-
-	hoveredEventId: number | null = null;
-	openHoverWindowTimeout: number | null = null;
 
 	public handleHover(eventId: number) {
-		this.openHoverWindowTimeout = window.setTimeout(() => {this.openHoverWindow(eventId)}, 500);
+		if (this.hoverTimeout !== null) {
+			clearTimeout(this.hoverTimeout);
+		}
+		if (this.hb?.id === `tl-hover-brief-${eventId}`) {
+			this.hoveredEventId = eventId;
+			return;
+		}
+		this.hoveredEventId = eventId;
+		if (this.hb && this.hb.id !== `tl-hover-brief-${eventId}`) {
+			this.hb.remove();
+			this.hb = null;
+		}
+		this.hoverTimeout = window.setTimeout(() => {
+			if (this.hoveredEventId !== eventId) {
+				return;
+			}
+			this.openHoverWindow(eventId);
+		}, 500);
 	}
 
-	public handleExitHover() {
-		if (this.openHoverWindowTimeout) {
-			clearTimeout(this.openHoverWindowTimeout);
-			this.openHoverWindowTimeout = null;
+	public handleExitHover(eventId?: number) {
+		if (eventId !== undefined && this.hoveredEventId !== eventId) {
+			return;
 		}
+		if (this.hoverTimeout !== null) {
+			clearTimeout(this.hoverTimeout);
+			this.hoverTimeout = null;
+		}
+		if (this.hb) {
+			this.hb.remove();
+			this.hb = null;
+		}
+		if (eventId === undefined || this.hoveredEventId === eventId) {
+			this.hoveredEventId = null;
+		}
+	}
+
+	public getEventById(eventId: number): Event | undefined {
+		return this.events.find((event) => event.id === eventId);
 	}
 
 	public openHoverWindow(eventId: number) {
 		console.log("you've been over this event long enough to show some info!", eventId);
+		this.hoverTimeout = null;
+		const tlEvent = document.getElementById(`tl-event-${eventId}`);
+		const eventDetails = this.getEventById(eventId);
+		if (!tlEvent) {
+			console.error(`could not find tlEvent for event ${eventId}`);
+			return;
+		}
+		if (!eventDetails) {
+			console.error(`could not find eventDetails for event ${eventId}`);
+			return;
+		}
+		const tlLocation = tlEvent?.getBoundingClientRect();
+		if (!tlLocation) {
+			console.error(`could not find tlLocation for event ${eventId}`);
+			return;
+		}
+
+		const hoverBriefLoc = tlLocation.y - 200
+		this.hb = document.createElement('div');
+		this.hb.classList.add('tl-hover-brief');
+		this.hb.id = `tl-hover-brief-${eventId}`;
+		this.hb.style.position = 'absolute';
+		this.hb.style.left = `${tlLocation.x}px`;
+		this.hb.style.top = `${hoverBriefLoc}px`;
+		let h3Hover = document.createElement('h3');
+		h3Hover.innerHTML = eventDetails.title;
+		this.hb.appendChild(h3Hover);
+		let pHover = document.createElement('p');
+		pHover.innerHTML = eventDetails.description ?? '';
+		this.hb.appendChild(pHover);
+		let aHover = document.createElement('a');
+		aHover.href = eventDetails.wikiUrl ?? '#';
+		aHover.target = '_blank';
+		aHover.innerHTML = 'See on Wikipedia ';
+		this.hb.appendChild(aHover);
+		document.body.appendChild(this.hb);
+		this.hb.addEventListener('mouseleave', (e) => {
+			//if they're just moving from hovering over this to hovering over the tl-event, don't close it
+			const newTarget = (e.relatedTarget as HTMLElement | null)?.closest('.tl-event') as HTMLElement | null;
+			if (newTarget) {
+				console.log(`user is hovering over the tl-event, not exiting hover`);
+				return;
+			}
+			this.handleExitHover(eventId);
+		});
 		
 	}
 
@@ -228,6 +288,17 @@ export class TLManager {
 				tlEventElement = document.createElement('div');
 				tlEventElement.classList.add('tl-event');
 				tlEventElement.id = `tl-event-${event.id}`;
+				tlEventElement.addEventListener('mouseenter', () => {
+					this.handleHover(event.id);
+				});
+				tlEventElement.addEventListener('mouseleave', (e) => {
+					const newTarget = (e.relatedTarget as HTMLElement | null)?.closest('.tl-hover-brief') as HTMLElement | null;
+					if (newTarget) {
+						console.log(`user is hovering over the hover window, not exiting hover`);
+						return;
+					}
+					this.handleExitHover(event.id);
+				});
 			}
 			if (!tlEventElement) {
 				console.error(`somewthing really weird happened`);
