@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, bigserial, real, date, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, integer, text, bigserial, real, date, boolean } from 'drizzle-orm/pg-core';
 
 export const events = pgTable("events", {
 	id: bigserial("id", {mode:'bigint'}).primaryKey(),
